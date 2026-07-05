@@ -154,16 +154,48 @@ async def verify_token(request: Request):
 # --- Q3 ---
 @app.get("/effective-config")
 async def get_config(request: Request):
-    cfg = {"port": config.Q3_PORT, "workers": config.Q3_WORKERS, "debug": config.Q3_DEBUG, "log_level": config.Q3_LOG_LEVEL, "api_key": "****"}
+    def to_bool(v):
+        return str(v).strip().lower() in ["true", "1", "yes", "on"]
+
+    # 1) defaults
+    cfg = {
+        "port": config.Q3_PORT,
+        "workers": config.Q3_WORKERS,
+        "debug": config.Q3_DEBUG,
+        "log_level": config.Q3_LOG_LEVEL,
+        "api_key": "****",
+    }
+
+    # 2) environment overrides
+    if os.getenv("PORT") is not None:
+        cfg["port"] = int(os.getenv("PORT"))
+    if os.getenv("WORKERS") is not None:
+        cfg["workers"] = int(os.getenv("WORKERS"))
+    if os.getenv("DEBUG") is not None:
+        cfg["debug"] = to_bool(os.getenv("DEBUG"))
+    if os.getenv("LOG_LEVEL") is not None:
+        cfg["log_level"] = os.getenv("LOG_LEVEL").strip().lower()
+
+    # 3) CLI/query overrides via repeated ?set=key=value
     for k, value in request.query_params.multi_items():
-        if k == "set":
-            key, val = value.split("=", 1)
-            if key in ["port", "workers"]:
-                cfg[key] = int(val)
-            elif key == "debug":
-                cfg[key] = str(val).lower() in ["true", "1", "yes", "on"]
-            else:
-                cfg[key] = val
+        if k != "set":
+            continue
+        if "=" not in value:
+            continue
+        key, val = value.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+
+        if key in ["port", "workers"]:
+            cfg[key] = int(val)
+        elif key == "debug":
+            cfg[key] = to_bool(val)
+        elif key == "log_level":
+            cfg[key] = val.lower()
+        elif key == "api_key":
+            # never expose real key
+            pass
+
     cfg["api_key"] = "****"
     return cfg
 
